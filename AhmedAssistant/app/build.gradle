@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.ahmed.assistant'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.ahmed.assistant'
+        minSdk 29
+        targetSdk 34
+        versionCode 6
+        versionName '0.2.0'
+
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach {
+            outputFileName = "0rus-v${variant.versionName}.apk"
+        }
+    }
+
+    lint {
+        disable 'ChromeOsAbiSupport'
+    }
+}
+
+dependencies {
+    implementation 'com.herohan:UVCAndroid:1.0.13'
+}
+
+// Certaines dépendances AndroidX de l'AAR UVC demandent Kotlin 1.8 tandis
+// qu'une dépendance transitive plus ancienne demande encore les modules 1.6.
+// Aligner les trois artefacts évite les classes dupliquées dans l'APK.
+configurations.configureEach {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+}

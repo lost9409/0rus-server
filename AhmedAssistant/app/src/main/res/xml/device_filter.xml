@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<usb>
+    <!-- Caméra SYX / Hua Que : VID 0x0DBA (3514), PID 0xD565 (54629). -->
+    <usb-device vendor-id="3514" product-id="54629" />
+    <!-- Secours pour les caméras dont Android expose surtout l'interface UVC. -->
+    <usb-device class="14" />
+    <usb-device class="239" subclass="2" />
+</usb>

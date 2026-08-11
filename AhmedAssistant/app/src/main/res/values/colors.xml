@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ink">#F4F7FB</color>
+    <color name="muted">#A8B3C5</color>
+    <color name="background">#09111F</color>
+    <color name="surface_alt">#18263A</color>
+    <color name="accent">#52D3A8</color>
+    <color name="warning">#FFCC66</color>
+    <color name="error">#FF7A86</color>
+    <color name="black">#000000</color>
+</resources>

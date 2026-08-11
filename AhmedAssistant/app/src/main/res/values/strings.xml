@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">0rus</string>
+    <string name="phase_label">ASSISTANT VISUEL · V0.2</string>
+    <string name="screen_title">0rus</string>
+    <string name="camera_waiting">Recherche de la caméra USB…</string>
+    <string name="usb_expected">Cible : SYX / Hua Que · VID 0DBA · PID D565</string>
+    <string name="preview_label">CAMÉRA</string>
+    <string name="preview_placeholder">Branchez la caméra USB\npuis autorisez son accès</string>
+    <string name="capture">Capturer et analyser</string>
+    <string name="analyzing">Analyse en cours…</string>
+    <string name="retry_usb_permission">Réessayer l’autorisation USB</string>
+    <string name="camera_permission_explanation">Android exige l’autorisation Caméra pour accorder une caméra USB UVC.</string>
+    <string name="button_hint">Bouton Bluetooth : Lecture/Pause = capture</string>
+    <string name="ai_not_configured">IA à configurer</string>
+    <string name="settings">Paramètres IA</string>
+    <string name="answer_title">RÉPONSE</string>
+    <string name="no_answer_position">— / —</string>
+    <string name="no_answer">La réponse apparaîtra ici après la première capture.</string>
+    <string name="analysis_in_progress">ANALYSE</string>
+    <string name="analysis_error">ERREUR</string>
+    <string name="key_log_title">DERNIÈRES COMMANDES</string>
+    <string name="key_log_empty">Aucune commande reçue</string>
+</resources>
