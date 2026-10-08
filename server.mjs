@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
-const MAX_BODY_BYTES = 18 * 1024 * 1024;
+const MAX_BODY_BYTES = 26 * 1024 * 1024;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
 const RATE_MAX_REQUESTS = 20;
 const rateBuckets = new Map();
@@ -39,19 +39,23 @@ export const RESPONSE_SCHEMA = {
 
 const BASE_INSTRUCTIONS = `Tu es 0rus, un assistant d'étude visuel francophone, utilisé uniquement dans des situations où la capture et l'assistance sont autorisées.
 
-Analyse toute l'image avec attention. Détecte TOUTES les questions, sous-questions et consignes visibles, puis réponds dans leur ordre. Ne fusionne pas des questions distinctes.
+Tu peux recevoir une image unique ou une SÉQUENCE ORDONNÉE d'images provenant d'un scan vidéo. Dans une séquence, plusieurs images peuvent se chevaucher, montrer des parties successives d'une même feuille, plusieurs feuilles, ou un texte de référence suivi de questions. Commence par reconstruire mentalement le document dans l'ordre des images et utilise le texte de contexte pour répondre aux questions qui s'y rapportent. Ne traite pas chaque image comme un document indépendant.
+
+Détecte TOUTES les questions, sous-questions et consignes visibles, puis réponds dans leur ordre. Ne fusionne pas des questions distinctes. Un passage de texte, un tableau, un graphique ou une illustration peut être du CONTEXTE à analyser : conserve-le comme source de compréhension même s'il ne contient pas lui-même de point d'interrogation.
 
 Règles de réponse :
 - Adapte la longueur à la demande : une définition simple doit rester courte ; une analyse de texte, une démonstration ou une question méthodologique doit être développée avec la structure attendue.
 - Pour un QCM, indique clairement la ou les lettres/réponses correctes et justifie brièvement. Vérifie si plusieurs choix sont possibles.
 - Respecte les négations et formulations comme « sauf », « incorrect », « ne…pas ».
+- Si une question renvoie à « ce texte », « le document », « l'auteur », un tableau ou un graphique vu dans une autre image de la séquence, utilise ce contexte avant de répondre.
+- Quand deux images se chevauchent, n'invente pas de répétition : fusionne mentalement les passages communs et garde la suite nouvelle.
 - Si les documents de cours disponibles contiennent la méthode ou la réponse, privilégie-les. Utilise le web seulement pour compléter une information absente ou actuelle.
-- N'invente jamais un texte illisible. Explique précisément ce qui doit être repris en photo.
+- N'invente jamais un texte illisible. Explique précisément quelle zone doit être rescannée.
 - Réponds en français, sauf si la question exige une autre langue.
 - "answer" est la réponse complète affichée. "spoken_answer" est une version naturelle à écouter, sans URL ni mise en forme.
 - "sources_used" contient les titres de fichiers réellement consultés et/ou les URL web réellement utilisées. Laisse la liste vide si aucun outil n'a été utilisé.`;
 
-export function buildOpenAiRequest({ imageBase64, mimeType, previousResponseId, guidance }, env = process.env) {
+export function buildOpenAiRequest({ imageBase64, mimeType, images, previousResponseId, guidance }, env = process.env) {
   const tools = [];
   const vectorStoreId = String(env.OPENAI_VECTOR_STORE_ID || "").trim();
   if (vectorStoreId) {
@@ -62,6 +66,16 @@ export function buildOpenAiRequest({ imageBase64, mimeType, previousResponseId, 
     });
   }
   tools.push({ type: "web_search", search_context_size: "medium" });
+
+  const normalizedImages = Array.isArray(images) && images.length > 0
+    ? images
+    : [{ imageBase64, mimeType }];
+  const scanMode = normalizedImages.length > 1;
+  const visualContent = normalizedImages.map((image, index) => ({
+    type: "input_image",
+    image_url: `data:${image.mimeType || "image/jpeg"};base64,${image.imageBase64 || ""}`,
+    detail: "high"
+  }));
 
   const personalGuidance = String(guidance || "").trim();
   const request = {
@@ -75,13 +89,11 @@ export function buildOpenAiRequest({ imageBase64, mimeType, previousResponseId, 
       content: [
         {
           type: "input_text",
-          text: "Lis cette nouvelle capture. Identifie toutes les questions et réponds selon leurs consignes."
+          text: scanMode
+            ? `Voici ${normalizedImages.length} vues successives d'un même scan, dans l'ordre chronologique. Reconstitue le contenu à travers les chevauchements, lis d'abord les textes/documents de référence, puis identifie toutes les questions et réponds en utilisant le contexte pertinent.`
+            : "Lis cette capture. Identifie les textes de contexte, toutes les questions et réponds selon leurs consignes."
         },
-        {
-          type: "input_image",
-          image_url: `data:${mimeType};base64,${imageBase64}`,
-          detail: "high"
-        }
+        ...visualContent
       ]
     }],
     tools,
@@ -159,17 +171,42 @@ async function readJson(request) {
 }
 
 function validatePayload(body) {
-  const imageBase64 = typeof body.image_base64 === "string" ? body.image_base64 : "";
-  if (imageBase64.length < 32 || imageBase64.length > 16 * 1024 * 1024
-      || !/^[A-Za-z0-9+/=]+$/.test(imageBase64)) {
-    const error = new Error("Image JPEG absente ou invalide");
+  const incoming = Array.isArray(body.images) && body.images.length > 0
+    ? body.images
+    : [{ image_base64: body.image_base64, mime_type: body.mime_type }];
+
+  if (incoming.length < 1 || incoming.length > 10) {
+    const error = new Error("Le scan doit contenir entre 1 et 10 images");
     error.statusCode = 400;
     throw error;
   }
-  const mimeType = body.mime_type === "image/png" ? "image/png" : "image/jpeg";
+
+  let totalBase64Length = 0;
+  const images = incoming.map((item, index) => {
+    const imageBase64 = typeof item?.image_base64 === "string" ? item.image_base64 : "";
+    totalBase64Length += imageBase64.length;
+    if (imageBase64.length < 32 || imageBase64.length > 6 * 1024 * 1024
+        || !/^[A-Za-z0-9+/=]+$/.test(imageBase64)) {
+      const error = new Error(`Image ${index + 1} absente ou invalide`);
+      error.statusCode = 400;
+      throw error;
+    }
+    return {
+      imageBase64,
+      mimeType: item?.mime_type === "image/png" ? "image/png" : "image/jpeg"
+    };
+  });
+
+  if (totalBase64Length > 20 * 1024 * 1024) {
+    const error = new Error("Le scan est trop volumineux");
+    error.statusCode = 413;
+    throw error;
+  }
+
   return {
-    imageBase64,
-    mimeType,
+    images,
+    imageBase64: images[0].imageBase64,
+    mimeType: images[0].mimeType,
     previousResponseId: String(body.previous_response_id || ""),
     guidance: String(body.guidance || "")
   };
